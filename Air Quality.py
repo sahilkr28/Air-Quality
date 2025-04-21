@@ -7,7 +7,6 @@ import seaborn as sns
 
 # Set visual style
 sns.set_style("whitegrid")
-plt.rcParams["figure.facecolor"] = "#ffffff"
 
 # Load dataset
 df = pd.read_csv("AirQuality Python Dataset.csv")
