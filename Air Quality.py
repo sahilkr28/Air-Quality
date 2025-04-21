@@ -4,26 +4,148 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import os
+from datetime import datetime
 
-# Set visual style
-sns.set_style("whitegrid")
-plt.rcParams["figure.facecolor"] = "#ffffff"
+def load_and_prepare_data(file_path):
+    """
+    Load and prepare the air quality dataset.
+    
+    Args:
+        file_path (str): Path to the CSV file
+        
+    Returns:
+        pd.DataFrame: Cleaned and prepared dataframe
+    """
+    try:
+        df = pd.read_csv(file_path)
+        print("Original Data:\n", df.head())
+        
+        # Add a randomized datetime column
+        date_range = pd.date_range(start='2022-01-01', end='2025-12-31', periods=len(df))
+        np.random.seed(42)
+        df['last_update'] = np.random.permutation(date_range)
+        
+        # Save and re-load to mimic real workflow
+        df.to_csv('Modified_AirQuality.csv', index=False)
+        df['last_update'] = pd.to_datetime(df['last_update'], errors='coerce')
+        
+        # Remove rows with missing essential data
+        df_cleaned = df.dropna(subset=['pollutant_id', 'pollutant_avg', 'last_update'])
+        return df_cleaned
+        
+    except FileNotFoundError:
+        print(f"Error: The file {file_path} was not found.")
+        return None
+    except Exception as e:
+        print(f"Error loading data: {str(e)}")
+        return None
 
-# Load dataset
-df = pd.read_csv("AirQuality Python Dataset.csv")
-print("Original Data:\n", df.head())
+def create_pivot_table(df_cleaned):
+    """
+    Create a pivot table from the cleaned data.
+    
+    Args:
+        df_cleaned (pd.DataFrame): Cleaned dataframe
+        
+    Returns:
+        pd.DataFrame: Pivot table with pollutants as columns
+    """
+    # Create pivot table
+    pivot_df = df_cleaned.pivot_table(
+        index=['country', 'state', 'city', 'station'],
+        columns='pollutant_id',
+        values='pollutant_avg',
+        aggfunc='mean'
+    ).reset_index()
+    
+    # Add back the datetime information
+    last_update_map = df_cleaned.groupby(['country', 'state', 'city', 'station'])['last_update'].max().reset_index()
+    pivot_df = pd.merge(pivot_df, last_update_map, on=['country', 'state', 'city', 'station'], how='left')
+    
+    # Rename pollutant columns to uppercase
+    pivot_df.columns.name = None
+    pivot_df = pivot_df.rename(columns=lambda col: col.upper() if isinstance(col, str) else col)
+    
+    return pivot_df
 
-# Add a randomized datetime column
-date_range = pd.date_range(start='2022-01-01', end='2025-12-31', periods=len(df))
-np.random.seed(42)
-df['last_update'] = np.random.permutation(date_range)
+def save_plot(fig, plot_name):
+    """
+    Save the plot to a plots directory.
+    
+    Args:
+        fig (matplotlib.figure.Figure): Figure to save
+        plot_name (str): Name of the plot
+    """
+    plots_dir = 'plots'
+    if not os.path.exists(plots_dir):
+        os.makedirs(plots_dir)
+    
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    filename = f"{plots_dir}/{plot_name}_{timestamp}.png"
+    fig.savefig(filename)
+    print(f"Plot saved as {filename}")
 
-# Save and re-load to mimic real workflow
-df.to_csv('Modified_AirQuality.csv', index=False)
-df['last_update'] = pd.to_datetime(df['last_update'], errors='coerce')
+def plot_pollutant_trends(pivot_df):
+    """
+    Create and save line plots for PM2.5 and PM10 trends.
+    
+    Args:
+        pivot_df (pd.DataFrame): Pivot table dataframe
+    """
+    # PM2.5 trend
+    if 'PM2.5' in pivot_df.columns:
+        pm25_df = pivot_df[['LAST_UPDATE', 'PM2.5']].dropna().sort_values(by='LAST_UPDATE')
+        fig = plt.figure(figsize=(12, 6))
+        sns.lineplot(data=pm25_df, x='LAST_UPDATE', y='PM2.5', marker='o')
+        plt.title('Trend of PM2.5 Over Time')
+        plt.xlabel('Date')
+        plt.ylabel('PM2.5 Level')
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        save_plot(fig, 'pm25_trend')
+        plt.close()
 
-# Remove rows with missing essential data
-df_cleaned = df.dropna(subset=['pollutant_id', 'pollutant_avg', 'last_update'])
+    # PM10 trend
+    if 'PM10' in pivot_df.columns:
+        pm10_data = pivot_df[['LAST_UPDATE', 'PM10']].dropna()
+        fig = plt.figure(figsize=(10, 5))
+        sns.lineplot(data=pm10_data, x='LAST_UPDATE', y='PM10', label='PM10', color='orange')
+        plt.title('PM10 Trend Over Time')
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        save_plot(fig, 'pm10_trend')
+        plt.close()
+
+def main():
+    """Main function to run the air quality analysis."""
+    # Set visual style
+    sns.set_style("whitegrid")
+    
+    # Load and prepare data
+    df_cleaned = load_and_prepare_data("AirQuality Python Dataset.csv")
+    if df_cleaned is None:
+        return
+    
+    # Create pivot table
+    pivot_df = create_pivot_table(df_cleaned)
+    print("\nPivoted and Cleaned Data:")
+    print(pivot_df.head())
+    
+    # Display statistics
+    print("\nDescriptive Stats:")
+    print(pivot_df.describe())
+    print("\nInfo:")
+    print(pivot_df.info())
+    
+    # Create plots
+    plot_pollutant_trends(pivot_df)
+    
+    # Continue with other visualizations...
+    # (Rest of the visualization code remains the same)
+
+if __name__ == "__main__":
+    main()
 
 # Objective 2: Transform Data with Pivot Table
 
